@@ -50,29 +50,28 @@ class FDA:
                 if len(self.transitions[state][symbol]) > 1: return False
         return True
 
-    def __str__(self) -> str:
-        def state_to_string(state: frozenset[str]) -> str:
-            string = ""
-            for state_part in sorted(state):
-                string += state_part
-            return string
+    @staticmethod
+    def state_to_string(state: frozenset[str]) -> str:
+        string = ""
+        for state_part in sorted(state):
+            string += state_part
+        return string
 
+    def __str__(self) -> str:
         num_states = str(self.num_states)
-        initial_state = ''.join(sorted(self.initial_state))
+        initial_state = "{" + ''.join(sorted(self.initial_state)) + "}"
         alphabet = "{" + ','.join(sorted(self.alphabet)) + "};"
         final_states = "{"
-        for state in self.final_states:
-            final_states += state_to_string(state) + ","
+        for state in sorted(self.final_states_as_tuple()):
+            final_states += "{" + self.state_to_string(state) + "},"
         final_states = final_states[:-1] + "}"
 
         base = f"{num_states};{initial_state};{final_states};{alphabet}"
         trans = ""
-        for state in self.transitions:
-            for symbol in self.transitions[state]:
-                for next_state in self.transitions[state][symbol]:
-                    string_state = state_to_string(state)
-                    string_next_state = state_to_string(next_state)
-                    trans += f"{string_state},{symbol},{string_next_state};"
+        for state, symbol, next_state in self.transitions_as_tuples():
+            string_state = "{" + self.state_to_string(state) + "}"
+            string_next_state = "{" + self.state_to_string(next_state) + "}"
+            trans += f"{string_state},{symbol},{string_next_state};"
 
         return base + trans
 
@@ -96,7 +95,7 @@ class FDA:
         temp_states: set[frozenset[str]] = set()
         deterministic.initial_state = states_epsilon_closure[self.initial_state]
         
-        deterministic.alphabet = self.alphabet.copy()
+        deterministic.alphabet = self.alphabet.copy().difference({"&"})
         deterministic.transitions = {}
         stack = [deterministic.initial_state]
 
@@ -142,14 +141,36 @@ class FDA:
         copy.alphabet = self.alphabet.copy()
         copy.transitions = {state: {symbol: next_state.copy() for symbol, next_state in self.transitions[state].items()} for state in self.transitions}
         return copy
-            
-input1 = "4;A;{D};{a,b};A,a,A;A,a,B;A,b,A;B,b,C;C,b,D"
-input2 = "3;A;{C};{1,2,3,&};A,1,A;A,&,B;B,2,B;B,&,C;C,3,C"
-input3 = "3;A;{C};{1,2,3,&};A,1,A;A,&,B;B,2,B;B,&,C;C,3,C"
-inputs = [input1, input2, input3]
 
-for input in inputs:
-    fda = FDA(input)
-    print(fda)
+    def transitions_as_tuples(self) -> list:
+        transitions = []
+        for state in self.transitions:
+            for symbol in self.transitions[state]:
+                for next_state in self.transitions[state][symbol]:
+                    transitions.append((self.state_to_string(state), symbol, self.state_to_string(next_state)))
+        transitions.sort(key=lambda x: sorted(x[0]))
+        return transitions
+
+    def final_states_as_tuple(self) -> tuple:
+        final_states = []
+        for state in self.final_states:
+            final_states.append(tuple(sorted(state)))
+        final_states.sort()
+        return tuple(final_states)
+
+is_vpl = False
+
+if is_vpl:
+    fda = FDA(input())
     print(fda.deterministic_equivalent())
-    print()
+else:
+    input1 = "4;A;{D};{a,b};A,a,A;A,a,B;A,b,A;B,b,C;C,b,D"
+    input2 = "3;A;{C};{1,2,3,&};A,1,A;A,&,B;B,2,B;B,&,C;C,3,C"
+    input3 = "4;P;{S};{0,1};P,0,P;P,0,Q;P,1,P;Q,0,R;Q,1,R;R,0,S;S,0,S;S,1,S"
+    inputs = [input1, input2, input3]
+
+    for input in inputs:
+        fda = FDA(input)
+        print(fda)
+        print(fda.deterministic_equivalent())
+        print()
