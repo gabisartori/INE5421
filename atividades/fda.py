@@ -159,8 +159,15 @@ class FDA:
             # Para cada símbolo do alfabeto, verifica se o estado destino da transição pertence à mesma classe de equivalência n
             for symbol in self.alphabet:
                 # Calcula o destino de cada estado
-                next_state = min(self.transitions[state][symbol])
-                other_next_state = min(self.transitions[other_state][symbol])
+                if state not in self.transitions or symbol not in self.transitions[state]:
+                    next_state = frozenset()
+                else:
+                    next_state = min(self.transitions[state][symbol])
+                
+                if other_state not in self.transitions or symbol not in self.transitions[other_state]:
+                    other_next_state = frozenset()
+                else:
+                    other_next_state = min(self.transitions[other_state][symbol])
 
                 # Busca a qual classe de equivalencia n cada estado pertence
                 next_state_class = None
@@ -218,17 +225,22 @@ class FDA:
         return equivalent
     
     def minimal_equivalent(self) -> 'FDA':
-        equivalent_states = self.equivalent_states()
+        # Determiniza, remove estados inalcançáveis e mortos
+        clean = self.deterministic_equivalent().remove_unreachable_states().remove_dead_states()
+
+        # Calcula os estados equivalentes
+        equivalent_states = clean.equivalent_states()
         minimal = FDA()
 
-        minimal.alphabet = self.alphabet.copy()
-        minimal.initial_state = frozenset([equivalent_states[self.initial_state]])
-        minimal.final_states = frozenset([equivalent_states[state] for state in self.final_states])
+        minimal.alphabet = clean.alphabet.copy()
+        minimal.initial_state = frozenset([equivalent_states[clean.initial_state]])
+        minimal.final_states = frozenset([equivalent_states[state] for state in clean.final_states])
 
+        # Substitui os estados pelos equivalentes na tabela de transições
         minimal.transitions = {}
-        for state in self.states:
-            for symbol in self.transitions[state]:
-                next_state = min(self.transitions[state][symbol])
+        for state in clean.states:
+            for symbol in clean.transitions[state]:
+                next_state = min(clean.transitions[state][symbol])
                 if equivalent_states[state] not in minimal.transitions:
                     minimal.transitions[equivalent_states[state]] = {}
                 if symbol not in minimal.transitions[equivalent_states[state]]:
@@ -239,6 +251,68 @@ class FDA:
         minimal.num_states = len(minimal.states)
         minimal.string = str(minimal)
         return minimal
+
+    def remove_unreachable_states(self) -> 'FDA':
+        '''Busca em profundidade a partir do estado inicial, estados não alcançados são inalcançáveis'''
+        reachable_states = set()
+        stack = [self.initial_state]
+        
+        while stack:
+            current_state = stack.pop()
+            reachable_states.add(current_state)
+            for symbol in self.alphabet:
+                if symbol not in self.transitions[current_state]: continue
+                for next_state in self.transitions[current_state][symbol]:
+                    if next_state not in reachable_states:
+                        stack.append(next_state)
+        unreachable_states = self.states.difference(reachable_states)
+
+        # Remove as transições que envolvem os estados inalcançáveis
+        self.remove_states_transitions(unreachable_states)
+
+        self.states = reachable_states
+        self.num_states = len(self.states)
+        self.string = str(self)
+        return self
+    
+    def remove_dead_states(self) -> 'FDA':
+        '''Busca reversa a partir dos estados de aceitação, estados que não são alcançados são considerados mortos.'''
+        dead_states = set(self.states.difference(self.final_states))
+        stack = [state for state in self.final_states]
+
+        while stack:
+            current_state = stack.pop()
+            dead_states.discard(current_state)
+            for other_state in self.transitions:
+                for symbol in self.transitions[other_state]:
+                    if current_state in self.transitions[other_state][symbol] and other_state in dead_states:
+                        stack.append(other_state)
+                        break
+        
+        self.remove_states_transitions(dead_states)
+
+        self.states = self.states.difference(dead_states)
+        self.num_states = len(self.states)
+        self.string = str(self)
+        return self
+
+    def remove_states_transitions(self, states: Set[State]) -> None:
+        '''Remove as entradas da tabela de transições que envolvem os estados passados como argumento.'''
+        transitions_to_remove = []
+        # Remove todas as transições que partem dos estados removidos
+        for state_to_remove in states:
+            if state_to_remove in self.transitions: del self.transitions[state_to_remove]
+
+        # Remove os estados removidos dos destinos das transições partidas de outros estados
+        for state in self.transitions:
+            for symbol in self.transitions[state]:
+                self.transitions[state][symbol] = self.transitions[state][symbol].difference(states)
+                # Se a transição não leva a outro estado, removê-la depois
+                if not self.transitions[state][symbol]: transitions_to_remove.append((state, symbol))
+
+        # Remove transições que agora não levam a lugar nenhum, pois seus destinos foram removidos
+        for state, symbol in transitions_to_remove:
+            del self.transitions[state][symbol]
 
     def copy(self) -> 'FDA':
         copy = FDA()
