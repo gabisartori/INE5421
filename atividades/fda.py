@@ -1,13 +1,15 @@
 from typing import Dict, FrozenSet, Set, List
 
+State = FrozenSet[str]
+
 class FDA:
     def __init__(self, string: str="") -> None:
         self.string: str = string
-        self.initial_state: FrozenSet[str] = None
-        self.transitions: Dict[FrozenSet[str], Dict[str, FrozenSet[FrozenSet[str]]]] = {}
-        self.final_states: FrozenSet[FrozenSet[str]] = frozenset()
-        self.current_state: FrozenSet[str] = None
-        self.states: FrozenSet[FrozenSet[str]] = frozenset((frozenset(("qm",)),))
+        self.initial_state: State = None
+        self.transitions: Dict[State, Dict[str, FrozenSet[State]]] = {}
+        self.final_states: FrozenSet[State] = frozenset()
+        self.current_state: State = None
+        self.states: FrozenSet[State] = frozenset((frozenset(("qm",)),))
         self.num_states: int = 0
         self.alphabet: Set[chr] = set()
         if self.string: self.parse()
@@ -54,7 +56,7 @@ class FDA:
         return True
 
     @staticmethod
-    def state_to_string(state: FrozenSet[str]) -> str:
+    def state_to_string(state: State) -> str:
         '''Une as partes de um estado em uma string.'''
         '''Exemplo: um estado {"A", "B"} vira "AB"'''
         string = ""
@@ -81,14 +83,14 @@ class FDA:
         return base + trans
 
     def deterministic_equivalent(self) -> 'FDA':
-        def epsilon_closure(state: FrozenSet[str], closure: set=None) -> FrozenSet[str]:
+        def epsilon_closure(state: State, closure: set=None) -> State:
             '''Retorna o ε* de um estado, realizando uma busca em profundidade.'''
             if closure is None: closure = set(state)
             if state not in self.transitions or "&" not in self.transitions[state]: return frozenset(closure)
 
             for reachable_state in self.transitions[state]["&"]:
                 if reachable_state not in closure:
-                    reachable_state_closure: FrozenSet[str] = epsilon_closure(reachable_state)
+                    reachable_state_closure: State = epsilon_closure(reachable_state)
                     closure.update(reachable_state_closure)
 
             return frozenset(closure)
@@ -99,13 +101,13 @@ class FDA:
         deterministic = FDA()
         # Trata todo autômato não determinístico como se tivesse transições por ε
         # Caso não tenha, ε* de cada estado é ele mesmo, não influenciando no resultado
-        states_epsilon_closure: Dict[FrozenSet[str], FrozenSet[str]] = {}
+        states_epsilon_closure: Dict[State, State] = {}
         for state in self.states.difference({'qm'}): states_epsilon_closure[state] = epsilon_closure(state)
 
         # Construir o autômato determinístico equivalente
 
         # Conjunto temporário para armaenar os estados a serem incluídos no autômato determinístico
-        temp_states: set[FrozenSet[str]] = set()
+        temp_states: set[State] = set()
 
         # O estado inicial do autômato determinístico é o ε* do estado inicial do autômato não determinístico
         deterministic.initial_state = states_epsilon_closure[self.initial_state]
@@ -151,8 +153,8 @@ class FDA:
         deterministic.string = str(deterministic)
         return deterministic
 
-    def equivalent_states(self) -> Dict[FrozenSet[str], FrozenSet[str]]:
-        def are_equivalent(state: FrozenSet[str], other_state: FrozenSet[str], previous_classes: List[FrozenSet[FrozenSet[str]]]) -> bool:
+    def equivalent_states(self) -> Dict[State, State]:
+        def are_equivalent(state: State, other_state: State, previous_classes: List[FrozenSet[State]]) -> bool:
             '''Verifica se dois estados são n_equivalentes, ou seja, se para toda transição, o estado destino pertence à mesma classe de equivalência n-1.'''
             # Para cada símbolo do alfabeto, verifica se o estado destino da transição pertence à mesma classe de equivalência n
             for symbol in self.alphabet:
@@ -175,17 +177,17 @@ class FDA:
             # Se nenhum símbolo encontrar umas classe destino diferente, então os estados são n+1 equivalentes
             return True
 
-        def belong(state: FrozenSet[str], equivalence_class: FrozenSet[FrozenSet[str]], previous_classes: List[FrozenSet[FrozenSet[str]]]) -> bool:
+        def belong(state: State, equivalence_class: FrozenSet[State], previous_classes: List[FrozenSet[State]]) -> bool:
             '''Verifica se um estado pertence a uma classe de equivalência.'''
             # Compara o estado com um estado qualquer da classe de equivalência
             for present_state in equivalence_class:
                 return are_equivalent(state, present_state, previous_classes)
 
-        current_equivalence: List[FrozenSet[FrozenSet[str]]] = [self.final_states, self.states.difference(self.final_states)]
-        next_equivalence: List[FrozenSet[FrozenSet[str]]] = []
+        current_equivalence: List[FrozenSet[State]] = [self.final_states, self.states.difference(self.final_states)]
+        next_equivalence: List[FrozenSet[State]] = []
         while True:
             for equivalence_class in current_equivalence:
-                temp_equivalence: List[FrozenSet[FrozenSet[str]]] = []
+                temp_equivalence: List[FrozenSet[State]] = []
                 for state in equivalence_class:
                     state_placed = False
                     # Coloca o estado na classe que ele pertence
