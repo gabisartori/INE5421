@@ -1,13 +1,15 @@
+from typing import Dict, FrozenSet, Set
+
 class FDA:
     def __init__(self, string: str="") -> None:
         self.string: str = string
-        self.initial_state: frozenset[str] = None
-        self.transitions: dict[frozenset[str], dict[str, frozenset[frozenset[str]]]] = {}
-        self.final_states: frozenset[frozenset[str]] = frozenset()
-        self.current_state: frozenset[str] = None
-        self.states: frozenset[frozenset[str]] = frozenset((frozenset(("qm",)),))
+        self.initial_state: FrozenSet[str] = None
+        self.transitions: Dict[FrozenSet[str], Dict[str, FrozenSet[FrozenSet[str]]]] = {}
+        self.final_states: FrozenSet[FrozenSet[str]] = frozenset()
+        self.current_state: FrozenSet[str] = None
+        self.states: FrozenSet[FrozenSet[str]] = frozenset((frozenset(("qm",)),))
         self.num_states: int = 0
-        self.alphabet: set[chr] = set()
+        self.alphabet: Set[chr] = set()
         if self.string: self.parse()
     
     def compute(self, symbol: chr) -> None:
@@ -43,6 +45,7 @@ class FDA:
         self.states = frozenset(temp_states)
 
     def is_deterministic(self):
+        '''Busca por transições por ε ou por um estado que tenha mais de um destino para um mesmo símbolo.'''
         for state in self.transitions:
             if "&" in self.transitions[state]: return False
             for symbol in self.alphabet:
@@ -51,7 +54,9 @@ class FDA:
         return True
 
     @staticmethod
-    def state_to_string(state: frozenset[str]) -> str:
+    def state_to_string(state: FrozenSet[str]) -> str:
+        '''Une as partes de um estado em uma string.'''
+        '''Exemplo: um estado {"A", "B"} vira "AB"'''
         string = ""
         for state_part in sorted(state):
             string += state_part
@@ -76,39 +81,54 @@ class FDA:
         return base + trans
 
     def deterministic_equivalent(self) -> 'FDA':
-        def epsilon_closure(state: frozenset[str], closure: set=None) -> frozenset[str]:
+        def epsilon_closure(state: FrozenSet[str], closure: set=None) -> FrozenSet[str]:
+            '''Retorna o ε* de um estado, realizando uma busca em profundidade.'''
             if closure is None: closure = set(state)
             if state not in self.transitions or "&" not in self.transitions[state]: return frozenset(closure)
 
             for reachable_state in self.transitions[state]["&"]:
                 if reachable_state not in closure:
-                    reachable_state_closure: frozenset[str] = epsilon_closure(reachable_state)
+                    reachable_state_closure: FrozenSet[str] = epsilon_closure(reachable_state)
                     closure.update(reachable_state_closure)
 
             return frozenset(closure)
 
+        # Se o autômato já é determinístico, retorna uma cópia dele mesmo
         if self.is_deterministic(): return self.copy()
+
         deterministic = FDA()
-        states_epsilon_closure: dict[frozenset[str], frozenset[str]] = {}
+        # Trata todo autômato não determinístico como se tivesse transições por ε
+        # Caso não tenha, ε* de cada estado é ele mesmo, não influenciando no resultado
+        states_epsilon_closure: Dict[FrozenSet[str], FrozenSet[str]] = {}
         for state in self.states.difference({'qm'}): states_epsilon_closure[state] = epsilon_closure(state)
 
-        temp_states: set[frozenset[str]] = set()
+        # Construir o autômato determinístico equivalente
+
+        # Conjunto temporário para armaenar os estados a serem incluídos no autômato determinístico
+        temp_states: set[FrozenSet[str]] = set()
+
+        # O estado inicial do autômato determinístico é o ε* do estado inicial do autômato não determinístico
         deterministic.initial_state = states_epsilon_closure[self.initial_state]
         
+        # O alfabeto do autômato determinístico é o mesmo do autômato não determinístico, sem o símbolo ε
         deterministic.alphabet = self.alphabet.copy().difference({"&"})
+        
+        # Começa a construir as transições do autômato determinístico, partindo do estado inicial
         deterministic.transitions = {}
         stack = [deterministic.initial_state]
-
         while stack:
+            # Adiciona o estado visitado ao conjunto de estados do autômato determinístico
             current_state = stack.pop()
             temp_states.add(current_state)
 
+            # Prepara a tabela de transições para receber o novo estado
             if current_state not in deterministic.transitions:
                 deterministic.num_states += 1
                 deterministic.transitions[current_state] = {}
 
+            # Para cada símbolo do alfabeto, visita os estados alcançáveis a partir do estado atual
             for symbol in sorted(deterministic.alphabet.difference({"&"})):
-                next_state: set[str] = set()
+                next_state: Set[str] = set()
                 for state in sorted(current_state):
                     state = frozenset((state,))
                     if state not in self.transitions or symbol not in self.transitions[state]: continue
@@ -119,8 +139,9 @@ class FDA:
                 if next_state not in temp_states:
                     stack.append(next_state)
 
-
+        # Agora que todos os estados foram calculados, o conjunto temporário pode ser transformado em um conjunto imutável
         deterministic.states = frozenset(temp_states)
+        # Adiciona ao conjunto de estados finais do autômato determinístico os estados que contém algum estado final do autômato não determinístico
         for state in deterministic.states:
             for final_state in self.final_states:
                 if final_state.intersection(state):
@@ -129,6 +150,9 @@ class FDA:
 
         deterministic.string = str(deterministic)
         return deterministic
+
+    def minimal_equivalent(self) -> 'FDA':
+        pass
 
     def copy(self) -> 'FDA':
         copy = FDA()
@@ -143,6 +167,7 @@ class FDA:
         return copy
 
     def transitions_as_tuples(self) -> list:
+        '''Retorna as transições do autômato como uma lista de tuplas (estado, símbolo, próximo estado) para facilitar a ordenação da saída do programa.'''
         transitions = []
         for state in self.transitions:
             for symbol in self.transitions[state]:
@@ -152,6 +177,7 @@ class FDA:
         return transitions
 
     def final_states_as_tuple(self) -> tuple:
+        '''Mesma ideia da função transitions_as_tuples, mas para os estados finais.'''
         final_states = []
         for state in self.final_states:
             final_states.append(tuple(sorted(state)))
