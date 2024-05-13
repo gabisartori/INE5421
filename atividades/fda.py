@@ -99,25 +99,16 @@ class FDA:
     def state_to_string(state: State) -> str:
         '''Une as partes de um estado em uma string.'''
         '''Exemplo: um estado {"A", "B"} vira "AB"'''
-        return ",".join(sorted(state))
+        return f"{{{','.join(sorted(state, key=lambda x: int(x) if x.isnumeric() else x))}}}"
 
     def __str__(self) -> str:
         num_states = str(self.num_states)
-        initial_state = "{" + ','.join(sorted(self.initial_state)) + "}"
-        alphabet = "{" + ','.join(sorted(self.alphabet)) + "}"
-        final_states = "{"
-        for state in sorted(self.final_states_as_tuple()):
-            final_states += "{" + ",".join(state) + "},"
-        final_states = final_states[:-1] + "}"
+        initial_state = self.state_to_string(self.initial_state)
+        alphabet = ','.join(sorted(self.alphabet))
+        final_states = ','.join([self.state_to_string(state) for state in sorted(self.final_states)])
+        transitions = ';'.join([','.join([self.state_to_string(state), symbol, self.state_to_string(next_state)]) for state, symbol, next_state in self.transitions_as_tuples()])
 
-        base = f"{num_states};{initial_state};{final_states};{alphabet};"
-        trans = ""
-        for state, symbol, next_state in self.transitions_as_tuples():
-            string_state = "{" + self.state_to_string(state) + "}"
-            string_next_state = "{" + self.state_to_string(next_state) + "}"
-            trans += f"{string_state},{symbol},{string_next_state};"
-
-        return base + trans
+        return f"{num_states};{initial_state};{{{final_states}}};{{{alphabet}}};{transitions}"
 
     def deterministic_equivalent(self) -> 'FDA':
         def epsilon_closure(state: State, closure: set=None) -> State:
@@ -257,8 +248,9 @@ class FDA:
         for state in self.states:
             find = None
             for equivalence_class in current_equivalence:
-                if state in equivalence_class: find = sorted([self.state_to_string(x) for x in equivalence_class])[0]
-            equivalent[state] = find        
+                if state in equivalence_class:
+                    find = sorted([x for x in equivalence_class], key=lambda x: self.state_to_string(x))[0]
+            equivalent[state] = find
         return equivalent
     
     def minimal_equivalent(self) -> 'FDA':
@@ -270,8 +262,9 @@ class FDA:
         minimal = FDA()
 
         minimal.alphabet = clean.alphabet.copy()
-        minimal.initial_state = frozenset([equivalent_states[clean.initial_state]])
+        minimal.initial_state = equivalent_states[clean.initial_state]
         minimal.final_states = frozenset([equivalent_states[state] for state in clean.final_states])
+        minimal.states = frozenset(equivalent_states.values())
 
         # Substitui os estados pelos equivalentes na tabela de transições
         minimal.transitions = {}
@@ -283,8 +276,7 @@ class FDA:
                 if symbol not in minimal.transitions[equivalent_states[state]]:
                     minimal.transitions[equivalent_states[state]][symbol] = frozenset()
                 minimal.transitions[equivalent_states[state]][symbol] = minimal.transitions[equivalent_states[state]][symbol].union(frozenset([equivalent_states[next_state]]))
-        
-        minimal.states = frozenset(equivalent_states.values())
+
         minimal.num_states = len(minimal.states)
         minimal.string = str(minimal)
         return minimal
@@ -375,13 +367,6 @@ class FDA:
         transitions.sort(key=lambda x: sorted(x[0])) # Ordena as transições pelo estado de origem
         return transitions
 
-    def final_states_as_tuple(self) -> tuple:
-        '''Mesma ideia da função transitions_as_tuples, mas para os estados finais.'''
-        final_states = []
-        for state in self.final_states:
-            final_states.append(tuple(sorted(state)))
-        final_states.sort(key=lambda x: len(x))
-        return tuple(final_states)
 
 if __name__ == "__main__":
     fda = FDA(regex=input().strip())
