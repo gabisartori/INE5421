@@ -1,10 +1,12 @@
 from typing import Dict, FrozenSet, Set, List
+import regex_parser
 
 State = FrozenSet[str]
 
 class FDA:
-    def __init__(self, string: str="") -> None:
+    def __init__(self, string: str="", regex: str="") -> None:
         self.string: str = string
+        self.regex: str = regex
         self.initial_state: State = None
         self.transitions: Dict[State, Dict[str, FrozenSet[State]]] = {}
         self.final_states: FrozenSet[State] = frozenset()
@@ -12,7 +14,8 @@ class FDA:
         self.states: FrozenSet[State] = frozenset((frozenset(("qm",)),))
         self.num_states: int = 0
         self.alphabet: Set[chr] = set()
-        if self.string: self.parse()
+        if self.string: self.from_string()
+        elif self.regex: self.from_regex()
     
     def compute(self, symbol: chr) -> None:
         if self.current_state is None: self.current_state = self.initial_state
@@ -26,7 +29,7 @@ class FDA:
         for symbol in string: self.compute(symbol)
         return self.current_state in self.final_states
 
-    def parse(self) -> None:
+    def from_string(self) -> None:
         temp_states = set()
         num_states, initial_state, final_states, alphabet, *transitions = self.string.split(';')
         self.num_states = int(num_states)
@@ -45,6 +48,43 @@ class FDA:
             temp_states.add(state)
             temp_states.update(self.transitions[state][symbol])
         self.states = frozenset(temp_states)
+    
+    def from_regex(self) -> None: 
+        root = regex_parser.CatRegexNode(left=regex_parser.parse_regex(self.regex), right=regex_parser.LeafRegexNode("#"))
+        n_leaves, leaf_symbol = root.name_leaves()
+        followpos_table = {}
+        for i in range(1, n_leaves+1): followpos_table[str(i)] = set()
+        followpos = root.followpos(followpos_table)
+        firstpos = root.firstpos
+
+        # Turn all of these sets to frozensets
+        for key in followpos: followpos[key] = frozenset(followpos[key])
+        firstpos = frozenset(firstpos)
+
+        self.alphabet = frozenset([symbol for symbol in self.regex if symbol.isalpha() or symbol.isnumeric()])
+        self.initial_state = frozenset(firstpos)
+
+        self.transitions = {}
+        stack = [firstpos]
+        while stack:
+            current_state = stack.pop()
+            if current_state not in self.transitions: self.transitions[current_state] = {}
+            for symbol in self.alphabet:
+                next_state = frozenset()
+                for state in current_state:
+                    if state not in followpos: continue
+                    if symbol == leaf_symbol[state]:
+                        next_state = next_state.union(followpos[state])
+                if not next_state: continue
+                if next_state not in self.transitions[current_state]: self.transitions[current_state][symbol] = frozenset()
+                self.transitions[current_state][symbol] = self.transitions[current_state][symbol].union(frozenset((next_state,)))
+                if next_state not in self.transitions: stack.append(next_state)
+
+        self.states = frozenset(self.transitions.keys())
+        self.final_states = frozenset([state for state in self.states if str(n_leaves) in state])
+        self.num_states = len(self.states)
+        self.string = str(self)
+        return self
 
     def is_deterministic(self):
         '''Busca por transições por ε ou por um estado que tenha mais de um destino para um mesmo símbolo.'''
@@ -59,21 +99,18 @@ class FDA:
     def state_to_string(state: State) -> str:
         '''Une as partes de um estado em uma string.'''
         '''Exemplo: um estado {"A", "B"} vira "AB"'''
-        string = ""
-        for state_part in sorted(state):
-            string += state_part
-        return string
+        return ",".join(sorted(state))
 
     def __str__(self) -> str:
         num_states = str(self.num_states)
-        initial_state = "{" + ''.join(sorted(self.initial_state)) + "}"
-        alphabet = "{" + ','.join(sorted(self.alphabet)) + "};"
+        initial_state = "{" + ','.join(sorted(self.initial_state)) + "}"
+        alphabet = "{" + ','.join(sorted(self.alphabet)) + "}"
         final_states = "{"
         for state in sorted(self.final_states_as_tuple()):
-            final_states += "{" + self.state_to_string(state) + "},"
+            final_states += "{" + ",".join(state) + "},"
         final_states = final_states[:-1] + "}"
 
-        base = f"{num_states};{initial_state};{final_states};{alphabet}"
+        base = f"{num_states};{initial_state};{final_states};{alphabet};"
         trans = ""
         for state, symbol, next_state in self.transitions_as_tuples():
             string_state = "{" + self.state_to_string(state) + "}"
@@ -332,8 +369,10 @@ class FDA:
         for state in self.transitions:
             for symbol in self.transitions[state]:
                 for next_state in self.transitions[state][symbol]:
-                    transitions.append((self.state_to_string(state), symbol, self.state_to_string(next_state)))
-        transitions.sort(key=lambda x: sorted(x[0]))
+                    transitions.append((state, symbol, next_state))
+
+        transitions.sort(key=lambda x: sorted(x[1])) # Ordena as transições pelo símbolo
+        transitions.sort(key=lambda x: sorted(x[0])) # Ordena as transições pelo estado de origem
         return transitions
 
     def final_states_as_tuple(self) -> tuple:
@@ -341,9 +380,9 @@ class FDA:
         final_states = []
         for state in self.final_states:
             final_states.append(tuple(sorted(state)))
-        final_states.sort()
+        final_states.sort(key=lambda x: len(x))
         return tuple(final_states)
 
 if __name__ == "__main__":
-    fda = FDA(input())
-    print(fda.minimal_equivalent())
+    fda = FDA(regex=input().strip())
+    print(fda)
