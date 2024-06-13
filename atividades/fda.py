@@ -367,6 +367,81 @@ class FDA:
         transitions.sort(key=lambda x: sorted(x[0])) # Ordena as transições pelo estado de origem
         return transitions
 
+class CFG:
+    def __init__(self, string: str) -> None:
+        self.rules: Dict[str, List[str]] = {}
+        self.rules_order: List[str] = []
+        self.first: Dict[str, Set[str]] = {}
+        self.follow: Dict[str, Set[str]] = {}
+        self.string = string
+        self.start: str = ""
+        self.from_string()
+
+    def from_string(self) -> None:
+        for i, rule in enumerate(self.string.split(';')[:-1]):
+            left, right = rule.split('=')
+            left, right = left.strip(), right.strip()
+            if i == 0: self.start = left
+
+            if left not in self.rules:
+                self.rules[left] = []
+                self.rules_order.append(left)
+            self.rules[left].append(right)
+
+    def first_follow(self) -> str:
+        # First
+        for rule in self.rules_order[::-1]:
+            if self.first.get(rule) is None: self.first[rule] = set()
+            for body in self.rules[rule]:
+                self.first[rule].update(self.body_first(body))
+
+        # Follow
+        self.follow[self.start] = {"$"}
+        for rule in self.rules_order:
+            if self.follow.get(rule) is None: self.follow[rule] = set()
+            self.follow[rule].update(self.head_follow(rule))
+
+        return str(self)
+
+    def body_first(self, body: str) -> Set[str]:
+        if body == "&": return {"&"}
+        if body[0].islower(): return {body[0]}
+        first = set()
+        for symbol in body:
+            if symbol.isupper():
+                first.update(self.first[symbol])
+                if "&" not in first: return first
+        return first
+
+    def head_follow(self, rule: str) -> Set[str]:
+        follow = set()
+        for other_rule in self.rules:
+            for body in self.rules[other_rule]:
+                # Check if non-terminal is in the body of this other rule and store its index
+                try: index = body.index(rule)
+                except ValueError: continue
+
+                while True:
+                    if index == len(body) - 1:
+                        follow.update(self.follow[other_rule])
+                        break
+                    elif body[index+1].islower():
+                        follow.update(body[index+1])
+                        break
+                    else:
+                        rule_first = self.first[body[index+1]]
+                        follow.update(rule_first)
+                        if "&" not in rule_first: break
+                        index += 1
+
+        return follow
+
+    def __str__(self) -> str:
+        order = lambda x: 123 if x == '&' else ord(x)
+        first = '; '.join([f"First({rule}) = {{{', '.join(sorted(self.first[rule], key=lambda x: order(x)))}}}" for rule in self.rules_order])
+        follow = '; '.join([f"Follow({rule}) = {{{', '.join(sorted(self.follow[rule], key=lambda x: order(x)))}}}" for rule in self.rules_order])
+        return f"{first};{follow}"
+
 
 if __name__ == "__main__":
     fda = FDA(regex=input().strip())
