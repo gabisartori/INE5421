@@ -433,8 +433,44 @@ class CFG:
                         follow.update(rule_first)
                         if "&" not in rule_first: break
                         index += 1
-
+        if "&" in follow: follow.remove("&")
         return follow
+
+    def get_rule_id(self, variable: str, body: str):
+        id = 1
+        for rule in self.rules_order:
+            for b in self.rules[rule]:
+                if rule == variable and b == body:
+                    return id
+                id += 1
+        raise ValueError("Rule not found")
+
+    def ll1_parser_table(self):
+        table = []
+        self.first_follow()
+        for rule in self.rules_order:
+            for body in self.rules[rule]:
+                first = self.body_first(body)
+                for symbol in first:
+                    if symbol == "&":
+                        for follow in self.follow[rule]:
+                            table.append([rule, follow, self.get_rule_id(rule, body)])
+                    else:
+                        table.append([rule, symbol, self.get_rule_id(rule, body)])
+        return table
+
+    def table_string(self, table:List[List[str]]):
+        order = lambda x: ord(x) + ord("a") if not x.islower() else ord(x)
+        table.sort(key=lambda x: x[2])
+        table.sort(key=lambda x: order(x[1]))
+        table.sort(key=lambda x: x[0])
+        
+        states = f"{{{','.join(sorted(self.rules_order))}}}"
+        initial_state = self.start
+        alphabet = f"{{{','.join(sorted(set([x[1] for x in table]), key=lambda x: order(x)))}}}"
+        transitions = "".join([f"[{state},{read},{reduce}]" for state, read, reduce in table])
+        output = f"{states};{initial_state};{alphabet};{transitions}"
+        return output
 
     def __str__(self) -> str:
         order = lambda x: 123 if x == '&' else ord(x)
