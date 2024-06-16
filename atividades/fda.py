@@ -405,7 +405,7 @@ class CFG:
 
     def body_first(self, body: str) -> Set[str]:
         if body == "&": return {"&"}
-        if body[0].islower(): return {body[0]}
+        if not body[0].isupper(): return {body[0]}
         first = set()
         for symbol in body:
             if symbol.isupper():
@@ -425,7 +425,7 @@ class CFG:
                     if index == len(body) - 1:
                         follow.update(self.follow[other_rule])
                         break
-                    elif body[index+1].islower():
+                    elif not body[index+1].isupper():
                         follow.update(body[index+1])
                         break
                     else:
