@@ -376,6 +376,7 @@ class CFG:
         self.string = string
         self.start: str = ""
         self.from_string()
+        self.first_follow()
 
     def from_string(self) -> None:
         for i, rule in enumerate(self.string.split(';')[:-1]):
@@ -388,22 +389,17 @@ class CFG:
                 self.rules_order.append(left)
             self.rules[left].append(right)
 
-    def first_follow(self) -> str:
+    def first_follow(self) -> None:
         # First
         for rule in self.rules_order[::-1]:
             if self.first.get(rule) is None: self.first[rule] = set()
-            rule_first = set()
-            for body in self.rules[rule]:
-                rule_first.update(self.body_first(body))
-            self.first[rule].update(rule_first)
+            self.first[rule].update(self.body_first(rule))
 
         # Follow
         self.follow[self.start] = {"$"}
         for rule in self.rules_order:
             if self.follow.get(rule) is None: self.follow[rule] = set()
             self.follow[rule].update(self.head_follow(rule))
-
-        return str(self)
 
     def body_first(self, body: str, visited=None) -> Set[str]:
         if visited is None: visited = set()
@@ -427,10 +423,10 @@ class CFG:
                 # Check if non-terminal is in the body of this other rule and store its index
                 try: index = body.index(rule)
                 except ValueError: continue
-
                 while True:
                     if index == len(body) - 1:
-                        follow.update(self.follow[other_rule])
+                        tmp = self.follow[other_rule] if self.follow.get(other_rule) is not None else self.head_follow(other_rule)
+                        follow.update(tmp)
                         break
                     elif not body[index+1].isupper():
                         follow.update(body[index+1])
@@ -443,7 +439,7 @@ class CFG:
         if "&" in follow: follow.remove("&")
         return follow
 
-    def get_rule_id(self, variable: str, body: str):
+    def get_rule_id(self, variable: str, body: str) -> int:
         id = 1
         for rule in self.rules_order:
             for b in self.rules[rule]:
@@ -452,7 +448,10 @@ class CFG:
                 id += 1
         raise ValueError("Rule not found")
 
+    def is_ll1(self): return True
+
     def ll1_parser_table(self):
+        if not self.is_ll1(): raise ValueError("This grammar is not LL(1)")
         table = []
         self.first_follow()
         for rule in self.rules_order:
@@ -479,11 +478,14 @@ class CFG:
         output = f"{states};{initial_state};{alphabet};{transitions}"
         return output
 
-    def __str__(self) -> str:
+    def first_follow_string(self) -> str:
         order = lambda x: ord(x) if x.isalpha() else ord(x) + ord("z")
         first = '; '.join([f"First({rule}) = {{{', '.join(sorted(self.first[rule], key=lambda x: order(x)))}}}" for rule in self.rules_order])
         follow = '; '.join([f"Follow({rule}) = {{{', '.join(sorted(self.follow[rule], key=lambda x: order(x)))}}}" for rule in self.rules_order])
-        return f"{first};{follow}"
+        return f"{first}; {follow}"
+    
+    def __str__(self) -> str:
+        return self.string
 
 
 if __name__ == "__main__":
