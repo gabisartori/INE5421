@@ -392,8 +392,10 @@ class CFG:
         # First
         for rule in self.rules_order[::-1]:
             if self.first.get(rule) is None: self.first[rule] = set()
+            rule_first = set()
             for body in self.rules[rule]:
-                self.first[rule].update(self.body_first(body))
+                rule_first.update(self.body_first(body))
+            self.first[rule].update(rule_first)
 
         # Follow
         self.follow[self.start] = {"$"}
@@ -403,14 +405,19 @@ class CFG:
 
         return str(self)
 
-    def body_first(self, body: str) -> Set[str]:
-        if body == "&": return {"&"}
-        if not body[0].isupper(): return {body[0]}
+    def body_first(self, body: str, visited=None) -> Set[str]:
+        if visited is None: visited = set()
         first = set()
         for symbol in body:
-            if symbol.isupper():
-                first.update(self.first[symbol])
-                if "&" not in first: return first
+            if symbol == "&": return {"&"}
+            if not symbol.isupper(): return {symbol}
+            if symbol in visited: continue
+
+            visited.add(symbol)
+            if self.first.get(symbol) and "&" not in self.first[symbol]: return self.first[symbol] 
+            for other_body in self.rules[symbol]:
+                first.update(self.body_first(other_body, visited))
+        
         return first
 
     def head_follow(self, rule: str) -> Set[str]:
@@ -460,7 +467,7 @@ class CFG:
         return table
 
     def table_string(self, table:List[List[str]]):
-        order = lambda x: ord(x) + ord("a") if not x.islower() else ord(x)
+        order = lambda x: ord(x) if x.isalpha() else ord(x) + ord("z")
         table.sort(key=lambda x: x[2])
         table.sort(key=lambda x: order(x[1]))
         table.sort(key=lambda x: x[0])
@@ -473,7 +480,7 @@ class CFG:
         return output
 
     def __str__(self) -> str:
-        order = lambda x: 123 if x == '&' else ord(x)
+        order = lambda x: ord(x) if x.isalpha() else ord(x) + ord("z")
         first = '; '.join([f"First({rule}) = {{{', '.join(sorted(self.first[rule], key=lambda x: order(x)))}}}" for rule in self.rules_order])
         follow = '; '.join([f"Follow({rule}) = {{{', '.join(sorted(self.follow[rule], key=lambda x: order(x)))}}}" for rule in self.rules_order])
         return f"{first};{follow}"
