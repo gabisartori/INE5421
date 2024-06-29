@@ -405,15 +405,15 @@ class CFG:
         if visited is None: visited = set()
         first = set()
         for symbol in body:
-            if symbol == "&": return {"&"}
-            if not symbol.isupper(): return {symbol}
+            if symbol == "&": return first.union({"&"})
+            if not symbol.isupper(): return first.union({symbol})
             if symbol in visited: continue
 
             visited.add(symbol)
-            if self.first.get(symbol) and "&" not in self.first[symbol]: return self.first[symbol] 
+            if self.first.get(symbol) and "&" not in self.first[symbol]: return first.union(self.first[symbol]) 
             for other_body in self.rules[symbol]:
                 first.update(self.body_first(other_body, visited))
-        
+
         return first
 
     def head_follow(self, rule: str) -> Set[str]:
@@ -448,7 +448,29 @@ class CFG:
                 id += 1
         raise ValueError("Rule not found")
 
-    def is_ll1(self): return True
+    def is_ll1(self):
+        if self.is_left_recursive():
+            print("Recursão à esquerda")
+            return False
+        if self.is_non_deterministic():
+            print("Não determinismo")
+            return False
+        return True
+    
+    def is_left_recursive(self):
+        return any([self.is_rule_recursive(rule) for rule in self.rules_order])
+
+    def is_rule_recursive(self, rule):
+        return False
+
+    def is_non_deterministic(self):
+        for rule in self.rules:
+            for i, body in enumerate(self.rules[rule]):
+                for j, other_body in enumerate(self.rules[rule]):
+                    if i == j: continue
+                    if self.body_first(body).intersection(self.body_first(other_body))-{"&"}:
+                        return True
+        return False
 
     def ll1_parser_table(self):
         if not self.is_ll1(): raise ValueError("This grammar is not LL(1)")

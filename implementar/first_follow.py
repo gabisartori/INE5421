@@ -12,5 +12,5 @@ inputs = [input_1, input_2, input_3]
 
 for input in inputs:
     cfg = CFG(input.strip())
-    print(cfg.first_follow())
+    print(cfg.first_follow_string())
     print()
