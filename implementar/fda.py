@@ -411,7 +411,8 @@ class CFG:
 
             visited.add(symbol)
             if self.first.get(symbol) and "&" not in self.first[symbol]: return first.union(self.first[symbol]) 
-            for other_body in self.rules[symbol]:
+            other_bodies = self.rules[symbol] if self.rules.get(symbol) is not None else []
+            for other_body in other_bodies:
                 first.update(self.body_first(other_body, visited))
 
         return first
@@ -457,10 +458,27 @@ class CFG:
             return False
         return True
     
-    def is_left_recursive(self):
+    def is_left_recursive(self) -> bool:
         return any([self.is_rule_recursive(rule) for rule in self.rules_order])
 
-    def is_rule_recursive(self, rule):
+    def is_rule_recursive(self, rule: str) -> bool:
+        return any([self.body_starts_with_rule(rule, body) for body in self.rules[rule]])
+    
+    def body_starts_with_rule(self, rule: str, body: str, visited=None) -> bool:
+        if visited is None: visited = set()
+        for symbol in body:
+            if symbol == "&": return False
+            if not symbol.isupper(): return False
+            if symbol == rule:
+                print(rule, body)
+                return True
+            if symbol in visited: continue
+            visited.add(symbol)
+            for other_body in self.rules[symbol]:
+                if self.body_starts_with_rule(rule, other_body, visited):
+                    print(rule, body)
+                    return True
+            if "&" not in self.first[symbol]: return False
         return False
 
     def is_non_deterministic(self):
